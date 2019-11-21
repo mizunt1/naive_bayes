@@ -20,6 +20,23 @@ def apply_gauss(data):
     sd = np.std(data)
     return (mean, sd)
 
+def columns_of_br(features):
+    columns_of_bin = []
+    columns_of_r = []
+    i = 0
+    for f in features:
+        if f == 'b':
+            columns_of_bin.append(i)
+        else:
+            columns_of_r.append(i)
+        i+=1
+    return np.array(columns_of_bin), np.array(columns_of_r)
+
+def sep_data(data, columns_of_bin, columns_of_r):
+    binary = np.delete(data, [columns_of_r], 1)
+    real = np.delete(data, [columns_of_bin], 1)
+    return binary, real
+
 class NBC:
     def __init__(self, feature_types, num_classes):
         self.feature_types = feature_types
@@ -27,31 +44,33 @@ class NBC:
         self.num_classes = num_classes
         self.num_data = None
 
-    def make_likelihood_table(self, dict_of_classes):
+    def make_likelihood_table(self, data_3d_b, data_3d_r, b, r):
         """
+        input data is data_3d_b: this is data[classes][num_datapoints][num_binary features]
+        b is list of indexes of where binary features are in the data
         create a (class, features) shaped matrix of likelihoods
+        two of them, depending on binary or real
         """
-        likelihood_table = np.zeros((self.num_classes, self.num_features), dtype=(float,2))
-        feature = 0
-        # features starts at one as dict of classes contains the first element
-        # being y_train
-        print("dict", dict_of_classes.keys())
-        for feature_type in self.feature_types:
-            classes_counter = 0
-            for classes in dict_of_classes.keys():
-                # calculate for one feature the likelihoods for each class
-                # then move on to the next feature
-                # probabilities must be calculated separately for each class
-                class_is = dict_of_classes[classes]
-                # this is data for a single class.
-                # each column is a feature
-                if feature_type == "b":
-                    likelihood = apply_bernoulli(class_is[:, feature+1], self.num_classes)
-                elif feature_type == "r":
+        num_bin_features = len(b)
+        num_r_features = len(r)
+        likelihood_table_bin = np.zeros(
+            (self.num_classes, self.num_bin_features), dtype=(float))
+        likelihood_table_r = np.zeros(
+            (self.num_classes, self.num_r_features), dtype=(float,2))       
+        for classes in data_3d_b:
+            # calculate for one feature the likelihoods for each class
+            # then move on to the next feature
+            # probabilities must be calculated separately for each class
+            class_is = dict_of_classes[classes]
+            # this is data for a single class.
+            # each column is a feature
+            if feature_type == "b":
+                likelihood = apply_bernoulli(class_is[:, feature+1], self.num_classes)
+            elif feature_type == "r":
                     likelihood = apply_gauss(class_is[:, feature+1])
                     
-                else:
-                    print("only B or r allowed")
+            else:
+                print("only B or r allowed")
                 likelihood_table[classes_counter][feature] = likelihood
                 classes_counter += 1
             feature +=1
@@ -72,12 +91,16 @@ class NBC:
         #tudo: make function which changed input categories in to ints?
         both_data = np.concatenate((y_train.reshape(len(y_train), 1), x_train), axis=1)
         both_data[both_data[:,1].argsort()]
+        data = np.delete(both_data, 0, 1)
         num_items_in_class = defaultdict(int)
         # dictionary of class: number of data points in that class
         for classes in y_train:
             num_items_in_class[classes] += 1
         prior_vector = np.asarray(list(num_items_in_class.values()))
-        data_as_dict = defaultdict(None)
+        b, r = columns_of_br(self.feature_types)
+        binary_data, real_data = sep_data(data, b, r)
+        data_3d_b = np.array((self.num_classes, self.num_data, len(b)))
+        data_3d_r = np.array((self.num_classes, self.num_data, len(r)))
         # creating data as fictionary. Key is class,
         # value is a matrix taken from both_data. each array in dictionary 
         # will have dimensions (num_data_points_in_that_class, features +1)
@@ -85,12 +108,22 @@ class NBC:
         # for each row within each object in the dictionary
         total_index = 0
         for classes, num_items in num_items_in_class.items():
-            data_as_dict[classes] = both_data[total_index:total_index+num_items, :]
+            data_3d_b[classes] = binary_data[total_index:total_index+num_items, :]
+            data_3d_r[classes] = real_data[total_index:total_index+num_items, :]
             total_index += num_items
+        ####### TODO CHECK ABOVE IS WORKING ############ 
         # count number of data points in each class 
+        #print(data)
+        #print(data_3d_b[0])
+        #print(data_3d_r[0])
+        
         # ??must iterate through all data points, no other way right?
-        likelihood_table = self.make_likelihood_table(data_as_dict)
-        return likelihood_table, prior_vector
+        print(data_3d_b.shape)
+        print(data_3d_b[0].shape)
+        print(data_3d_b[0][0].shape)
+        likelihood_table_b = self.make_likelihood_table(data_3d_b)
+        likelihood_table_r = self.make_likelihood_table(data_3d_r)
+        return likelihood_table_b, likelihood_table_r, prior_vector
         
         
     def predict(self, in_data, likelihood_table, prior_vector):
@@ -127,7 +160,8 @@ def main():
 main()
 
 # Next to do
-# smoothing
-# figure out bernoulli
+# check indices after separating and classing
+# do make likelighood table, vectorise functions
+# do pred fun 
 
 
