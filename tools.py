@@ -3,43 +3,61 @@ import numpy as np
 from collections import defaultdict
 #nbc = NBC(feature_types=['b', 'r', 'b'], num_classes=4)
 
-class NBC:
-    def __init__(self, feature_types,num_classes):
-        self.feature_types = feature_types
-        self.num_classes = num_classes
-        self.likelihood_table = np.array(num_classes, len(feature_types))
-
-    def apply_berboulli(classes):
-        print("apply b")
+def apply_bernoulli(data, num_classes):
+    """
+    bernoulli with laplace smoothing.
+    add one to each numerator, add num_classes to each denom
+    """
+    num_ones = (data == 1).sum()
+    total = len(data)
+    return ((num_ones + 1 / total+num_classes), None)
     
-    def applu_gauss(classes):
-        print("apply g")
-    def make_likelihood_table(dict_of_classes):
+def apply_gauss(data):
+    """
+    TODO: Must make mean non zero
+    """
+    mean = np.mean(data)
+    sd = np.std(data)
+    return (mean, sd)
+
+class NBC:
+    def __init__(self, feature_types, num_classes):
+        self.feature_types = feature_types
+        self.num_features = len(feature_types)
+        self.num_classes = num_classes
+        self.num_data = None
+
+    def make_likelihood_table(self, dict_of_classes):
         """
         create a (class, features) shaped matrix of likelihoods
         """
-        likelihoods=np.array(classes, features)
-        classes = 0
-        features = 1
+        likelihood_table = np.zeros((self.num_classes, self.num_features), dtype=(float,2))
+        feature = 0
         # features starts at one as dict of classes contains the first element
         # being y_train
+        print("dict", dict_of_classes.keys())
         for feature_type in self.feature_types:
-            for classes in dict_of_classes:
+            classes_counter = 0
+            for classes in dict_of_classes.keys():
                 # calculate for one feature the likelihoods for each class
                 # then move on to the next feature
                 # probabilities must be calculated separately for each class
+                class_is = dict_of_classes[classes]
+                # this is data for a single class.
+                # each column is a feature
                 if feature_type == "b":
-                    likelihood = apply_berboulli(classes)
+                    likelihood = apply_bernoulli(class_is[:, feature+1], self.num_classes)
                 elif feature_type == "r":
-                    mean, sd = apply_gauss(classes)
+                    likelihood = apply_gauss(class_is[:, feature+1])
+                    
                 else:
                     print("only B or r allowed")
-                likelihoods[classes][features] = likelihood
-                classes += 1
-            features +=1
-        return likelihoods
+                likelihood_table[classes_counter][feature] = likelihood
+                classes_counter += 1
+            feature +=1
+        return likelihood_table
         
-    def fit(x_train, y_train):
+    def fit(self, x_train, y_train):
         """will make a matrix of size (classes, features) for the liklihoods:
         p(x=x'|features, class)
         and a vector of priors: p(c)
@@ -47,17 +65,18 @@ class NBC:
         for a single class
         x_train: data of form (N_points,num_features)
         y_train: "answers", classes of shape (N_points)
+        outputs: likelihood table of form (num_classes, features)
+                 priors which show the number of items in each class (num_classes)
         """ 
         self.num_points = len(y_train)
         #tudo: make function which changed input categories in to ints?
-        both_data = np.concatenate(y_train, x_train, axis=1)
-        both_data.view('i8,i8,i8').sort(order=['f1'], axis=0)
-
-        num_items_in_class = defaultdict(None)
+        both_data = np.concatenate((y_train.reshape(len(y_train), 1), x_train), axis=1)
+        both_data[both_data[:,1].argsort()]
+        num_items_in_class = defaultdict(int)
         # dictionary of class: number of data points in that class
         for classes in y_train:
             num_items_in_class[classes] += 1
-        self.prior_vector = np.array(num_items_in_class.values())
+        prior_vector = np.asarray(list(num_items_in_class.values()))
         data_as_dict = defaultdict(None)
         # creating data as fictionary. Key is class,
         # value is a matrix taken from both_data. each array in dictionary 
@@ -65,37 +84,50 @@ class NBC:
         # first column is the label, i.e. the class, which should be the same
         # for each row within each object in the dictionary
         total_index = 0
-        for classes, num_items in num_items_in_class:
-            data_as_dict[classes] = both_data[total_index:num_items]
+        for classes, num_items in num_items_in_class.items():
+            data_as_dict[classes] = both_data[total_index:total_index+num_items, :]
             total_index += num_items
-        
         # count number of data points in each class 
         # ??must iterate through all data points, no other way right?
-        self.make_likelihood_table(data_as_dict)
+        likelihood_table = self.make_likelihood_table(data_as_dict)
+        return likelihood_table, prior_vector
         
-        return None
         
-    def predict():
+    def predict(self, in_data, likelihood_table, prior_vector):
+        
+        def f(x, num_data):
+            # return math.sqrt(x)
+            x* np.log(x/num_data)
+
+        vf = np.vectorize(f)
+
+        log_likelihood = np.log(likelihood_table)
+        prior_vector = vf(prior_vector)
+        
+        print(type(likelihood_table))
+        print(likelihood_table.shape)
         return None
 
 
 def main():
     iris = load_iris()
     x, y = iris['data'], iris['target']
-    print(x.shape)
-    print(y.shape)
+    y.reshape(150,1)
+
     num_classes = 3
     num_features = x.shape[1]
-    feature_types = ['b', 'r', 'b']
+    feature_types = ['b', 'r', 'b', 'r']
     nbc = NBC(feature_types, num_classes)
-    fit(x, y)
-
+    likelihood_table, prior_vector = nbc.fit(x, y)
+    
+    print(likelihood_table)
+    print(prior_vector)
+    nbc.predict(x[0], likelihood_table, prior_vector)
+    
 main()
 
 # Next to do
-# check dictionary is correct
-# check number of classes
-# fix bugs
-# apply bernoulli and gaussian
-# write prediction function
+# smoothing
+# figure out bernoulli
+
 
