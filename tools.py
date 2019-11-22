@@ -36,7 +36,7 @@ class NBC:
         """
         num_ones = (data == 1).sum()
         total = len(data)
-        return num_ones + 1 / total+self.num_classes
+        return np.log(num_ones + 1 / total+self.num_classes)
 
     def apply_gauss(self,data):
         """
@@ -121,32 +121,50 @@ class NBC:
         log_likelihood_b = np.log(self.likelihood_table_b)
         def pdf(in_data,means,stds):
             prob = scipy.stats.norm(stds, means).pdf(in_data)
-            return prob
+            return log(prob)
+        def format_priors(in_prior):
+            return self.num_points*np.log(in_prior/self.num_points)
+            
+        vec_p = np.vectorize(format_priors)
         vec = np.vectorize(pdf)
-        out = vec(in_data,self.likelihood_table_r_mean, self.likelihood_table_r_sd)
-        #### TODO
-        print(out.shape)
-        return None
-
+        log_real = vec(in_data,self.likelihood_table_r_mean, self.likelihood_table_r_sd)
+        priors = vec_p(self.prior_vector)
+        log_bin  = self.likelihood_table_b
+        log_table = np.concatenate((priors, log_bin, log_table), axis=1)
+        pred_class = np.argmax(np.sum(log_table, axis=1))
+        return pred_class
 
 def main():
     iris = load_iris()
     x, y = iris['data'], iris['target']
-    N, D = x.shape
-    Ntrain = int(0.8 * N)
-    shuffler = np.random.permutation(N)
-    xtrain = x[shuffler[:Ntrain]]
-    ytrain = y[shuffler[:Ntrain]]
-    xtest = x[shuffler[Ntrain:]]
-    ytest = y[shuffler[Ntrain:]]
-
+    N_points, D_features = x.shape
+    Ntrain = int(0.8 * N_points)
+    def train_loop():
+        k = 1
+        for k in range(11):
+            Ntrain_small = int(k*0.1*Ntrain)
+            print("num train points", Ntrain_small)
+            shuffler = np.random.permutation(Ntrain_small)
+            xtrain = x[shuffler[:Ntrain_small]]
+            # select N points out of shuffled array
+            ytrain = y[shuffler[:Ntrain_small]]
+            xtest = x[shuffler[Ntrain_small:]]
+            ytest = y[shuffler[Ntrain_small:]]
+            feature_types = ['b', 'r', 'b', 'r']
+            nbc = NBC(feature_types, D_features)
+            nbc.fit(xtrain, ytrain)
+            nbc.predict(x_test)
+            #train
+            #predict
+            #append error
+            k += 1
+    train_loop()
 
     y.reshape(150,1)
 
     num_classes = 3
     num_features = x.shape[1]
-    feature_types = ['b', 'r', 'b', 'r']
-    nbc = NBC(feature_types, num_classes)
+
     nbc.fit(x, y)
     nbc.predict(x[0,0:2])
     
@@ -154,10 +172,11 @@ def main():
 main()
 
 # Next to do
+
 # maybe do some numerical checks
+# make predict so that it can run
 # sort out predict for binary features
 # find out what to do with priors and laplace smoothing
 # add logs
-# sort out shuffle 
 
 
