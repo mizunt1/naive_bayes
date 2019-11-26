@@ -123,7 +123,6 @@ class NBC:
             else:
                 data_classes_r[classes] = real_data[total_index:total_index+num_items, :]
             total_index += num_items
-        ####### TODO CHECK ABOVE IS WORKING ############ 
         self.likelihood_table_b, self.likelihood_table_r_mean, self.likelihood_table_r_sd  = self.make_likelihood_table(data_classes_b, data_classes_r, self.num_b_features, self.num_r_features)
         
 
@@ -131,10 +130,11 @@ class NBC:
         # TUDO FIND OUT THE ACTUAL FUNCTION for periors
         self.num_data = in_data.shape[0]
         def pdf(in_data,means,stds):
-            prob = scipy.stats.norm(stds, means).pdf(in_data)
+            prob = scipy.stats.norm(means, stds).pdf(in_data)
             return np.log(prob)
 
         def format_priors(in_prior):
+           #not being used
             return self.num_points*np.log(in_prior/self.num_points)
             
         def binary(prob, in_data):
@@ -154,7 +154,7 @@ class NBC:
             for i in range(self.num_classes):
                 meani = self.likelihood_table_r_mean[:,j][i]
                 sdi = self.likelihood_table_r_sd[:,j][i]
-                ans = vec(meani, sdi, dataj)
+                ans = vec(dataj, meani, sdi)
                 answ_r[i][j] = ans
                 i+=1
             j +=1
@@ -198,13 +198,14 @@ class NBC:
         o = 0
         array_is = np.zeros((self.num_classes, self.num_data))
         for i in range(self.num_classes):
-            array_is[i, 0:self.num_data] = (final_ans[i] + self.num_items_in_class[i])
+            array_is[i, 0:self.num_data] = (final_ans[i] + np.log(self.num_items_in_class[i])/self.num_data)
             i += 1
         
         return np.argmax(array_is, axis = 0)
 def main():
     iris = load_iris()
     x, y = iris['data'], iris['target']
+    print(y)
     print(x.shape)
     num_classes = 3
     print(y.shape)
@@ -220,7 +221,6 @@ def main():
     correct = np.count_nonzero(y==prediction)
     print("correct", correct)
     print("accuracy", correct/len(y))
-    """
     def train_loop():
         
         k = 1
@@ -233,16 +233,17 @@ def main():
             ytrain = y[shuffler[:Ntrain_small]]
             xtest = x[shuffler[Ntrain_small:]]
             ytest = y[shuffler[Ntrain_small:]]
-            feature_types = ['b', 'r', 'b', 'r']
+            feature_types = ['r', 'r', 'r', 'r']
             nbc = NBC(feature_types, D_features)
             nbc.fit(xtrain, ytrain)
-            nbc.predict(x_test)
+            prediction = nbc.predict(xtest)
+            correct = np.count_nonzero(ytest==prediction)
+            print("fraction correct ", correct/Ntrain_small)
             #train
             #predict
             #append error
             k += 1
     train_loop()
-    """
     y.reshape(150,1)
 
     num_classes = 3
